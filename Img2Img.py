@@ -1,5 +1,5 @@
 """
-Usage: python generate_latent.py <src_img_dir> [--out_dir DIR] [--sampler_steps N][--cfg_scale FLOAT] [--seed INT]
+Usage: python Img2Img.py <src_img_dir> [--out_dir DIR] [--sampler_steps N][--cfg_scale FLOAT] [--seed INT]
 """
 
 import argparse
