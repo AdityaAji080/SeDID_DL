@@ -1,20 +1,21 @@
 """
-python RESNET_Classifier.py \
-    --zt_real_dir      /............ \
-    --zt_fake_dir      /............ \
-    --ztprime_real_dir /............ \
-    --ztprime_fake_dir /............ \
-    --variant          both \
-    --output_dir       outputs/sedid_1000 \
-
-optional:
-    --abs_diff         true
-    --train_ratio      0.9
-    --batch_size       128
-    --accumulation_steps 1
-    --n_epochs         20
-    --init_lr          0.001
-    --seed             42
+usage:
+    python RESNET_Classifier.py \
+        --zt_real_dir      /............ \
+        --zt_fake_dir      /............ \
+        --ztprime_real_dir /............ \
+        --ztprime_fake_dir /............ \
+        --variant          both \
+        --output_dir       outputs/sedid_1000 \
+    
+    optional:
+        --abs_diff         true
+        --train_ratio      0.9
+        --batch_size       128
+        --accumulation_steps 1
+        --n_epochs         20
+        --init_lr          0.001
+        --seed             42
 """
 
 import argparse
