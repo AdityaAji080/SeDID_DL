@@ -1,0 +1,5 @@
+run_name,variant,source_file,auc,acc,precision,recall,f1,tpr_at_fpr1,tpr_at_fpr01,val_loss,threshold,TN,FP,FN,TP,n_real,n_fake,epoch,n_epochs,init_lr,batch_size,seed
+sedid_DL6,SeDIDStat,sedid_stat_metrics.pt,1.0000,1.0000,1.0000,1.0000,1.0000,1.0000,1.0000,,-19.247261,974,0,0,1026,974,1026,,,,,
+sedid_DL6,SeDIDNNs,sedid_nns_best.pth,1.0000,1.0000,1.0000,1.0000,1.0000,1.0000,1.0000,0.0065,,974,0,0,1026,974,1026,0,20,0.001,128,42
+sedid_DL1000,SeDIDStat,sedid_stat_metrics.pt,1.0000,0.9993,1.0000,0.9969,0.9985,1.0000,1.0000,,-0.312319,1007,0,1,326,1007,327,,,,,
+sedid_DL1000,SeDIDNNs,sedid_nns_best.pth,1.0000,0.9978,1.0000,0.9908,0.9954,1.0000,1.0000,0.0060,,1007,0,3,324,1007,327,2,20,0.001,128,42
