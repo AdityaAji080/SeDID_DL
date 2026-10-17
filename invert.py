@@ -46,6 +46,18 @@ def _vae_dtype(pipeline, dtype):
     return torch.float32 if getattr(pipeline.vae.config, "force_upcast", False) else dtype
 
 
+def _latent_stats(pipeline, like):
+    """VAE latent normalisation. Most VAEs only scale; SD3/FLUX also shift; some (e.g. SDXL
+    variants) use per-channel mean/std. Returns (mean, std) broadcastable to `like`."""
+    cfg = pipeline.vae.config
+    mean_cfg, std_cfg = getattr(cfg, "latents_mean", None), getattr(cfg, "latents_std", None)
+    if mean_cfg is not None and std_cfg is not None:
+        shape = (1, len(mean_cfg), 1, 1)
+        to = dict(device=like.device, dtype=like.dtype)
+        return torch.tensor(mean_cfg, **to).view(shape), torch.tensor(std_cfg, **to).view(shape)
+    return (getattr(cfg, "shift_factor", None) or 0.0), 1.0
+
+
 def encode_images(pipeline, imgs, dtype):
     """PIL images → scaled latents, using the VAE posterior mode (deterministic)."""
     vae_dtype = _vae_dtype(pipeline, dtype)
@@ -53,14 +65,15 @@ def encode_images(pipeline, imgs, dtype):
         pipeline.vae.to(vae_dtype)
     x =pipeline.image_processor.preprocess(imgs).to(device=pipeline.device, dtype=vae_dtype)
     latents = pipeline.vae.encode(x).latent_dist.mode()
-    shift = getattr(pipeline.vae.config, "shift_factor", None) or 0.0
-    return ((latents - shift) * pipeline.vae.config.scaling_factor).to(dtype)
+    mean, std = _latent_stats(pipeline, latents)
+    return ((latents - mean) * pipeline.vae.config.scaling_factor / std).to(dtype)
 
 
 def decode_latents(pipeline, latents, dtype):
     vae_dtype = _vae_dtype(pipeline, dtype)
-    shift = getattr(pipeline.vae.config, "shift_factor", None) or 0.0
-    z = latents.to(vae_dtype) / pipeline.vae.config.scaling_factor + shift
+    z = latents.to(vae_dtype)
+    mean, std = _latent_stats(pipeline, z)
+    z = z * std / pipeline.vae.config.scaling_factor + mean
     images = pipeline.vae.decode(z, return_dict=False)[0]
     return pipeline.image_processor.postprocess(images, output_type="pil")
 
@@ -80,7 +93,8 @@ def make_schedulers(orig_config):
             schedulers.DDIMScheduler.from_config(cfg))
 
 
-def run(pipeline, scheduler, latents, prompts, args, collect):
+def run(pipeline, scheduler, latents, prompts, args, callbacks):
+    """One full sampler pass. `callbacks` is (modern_cb, legacy_cb) from collect_intermediate_latents."""
     pipeline.scheduler = scheduler
     kwargs = dict(prompt=prompts, latents=latents, num_inference_steps=args.sampler_steps,
                   guidance_scale=args.cfg_scale, num_images_per_prompt=1, output_type="latent",
@@ -90,9 +104,13 @@ def run(pipeline, scheduler, latents, prompts, args, collect):
         kwargs["eta"] = 0.0  # deterministic DDIM — required for SeDID
     if "use_resolution_binning" in params:  # PixArt
         kwargs["use_resolution_binning"] = False
-    if collect is not None:
-        kwargs["callback_on_step_end"] = collect
+    modern_cb, legacy_cb = callbacks
+    if "callback_on_step_end" in params:
+        kwargs["callback_on_step_end"] = modern_cb
         kwargs["callback_on_step_end_tensor_inputs"] = ["latents"]
+    else:  # older-style pipelines such as PixArt-α/Σ
+        kwargs["callback"] = legacy_cb
+        kwargs["callback_steps"] = 1
     return pipeline(**kwargs).images
 
 
@@ -141,8 +159,9 @@ def main():
     pipeline = AutoPipelineForText2Image.from_pretrained(args.model_id, torch_dtype=dtype, token=args.hub_token)
     if hasattr(pipeline, "safety_checker"):
         pipeline.safety_checker = None
-    if "callback_on_step_end" not in inspect.signature(pipeline.__call__).parameters:
-        raise RuntimeError("This pipeline does not support callback_on_step_end; upgrade diffusers.")
+    call_params = inspect.signature(pipeline.__call__).parameters
+    if "callback_on_step_end" not in call_params and "callback" not in call_params:
+        raise RuntimeError(f"{type(pipeline).__name__} exposes no per-step callback; cannot record latents.")
     # Stop the txt2img pipeline from replacing our latents with fresh noise.
     pipeline.prepare_latents = types.MethodType(inert_prepare_latents, pipeline)
     pipeline.to(device)
@@ -176,10 +195,10 @@ def main():
 
             z0 = encode_images(pipeline, imgs, dtype)
 
-            fwd_cb, _, fwd = collect_intermediate_latents()
-            rev_cb, _, rev = collect_intermediate_latents()
-            zN = run(pipeline, inv_scheduler, z0, prompts, args, fwd_cb)       # fwd[k] is at noise level t_k
-            z0_recon = run(pipeline, ddim_scheduler, zN, prompts, args, rev_cb)  # rev[j] is at t_{N-2-j}
+            fwd_modern, fwd_legacy, fwd = collect_intermediate_latents()
+            rev_modern, rev_legacy, rev = collect_intermediate_latents()
+            zN = run(pipeline, inv_scheduler, z0, prompts, args, (fwd_modern, fwd_legacy))       # fwd[k] is at noise level t_k
+            z0_recon = run(pipeline, ddim_scheduler, zN, prompts, args, (rev_modern, rev_legacy))  # rev[j] is at t_{N-2-j}
 
             for k in args.sedid_steps:
                 zt, zt_prime = fwd[k], rev[N - 2 - k]  # same noise level t_k
