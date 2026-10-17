@@ -1,19 +1,37 @@
-import torch
+"""
+Utilities for running diffusers text-to-image pipelines "backwards" (image → noise).
+
+- collect_intermediate_latents: callbacks that record the latent after every sampler step.
+- inert_prepare_latents: drop-in replacement for a pipeline's prepare_latents that passes the
+  caller's latents through untouched (so DDIM inversion can start from an encoded image).
+- *_inverted_set_timesteps: experimental inverted schedules for Euler / Heun / flow-matching
+  schedulers (SD3, FLUX-style models). invert.py currently uses DDIM inversion only; these are
+  kept for extending the method to flow-matching models.
+
+Parts of this file are adapted from diffusers (Apache-2.0). Edits marked "ASindhu Edit" and
+"JStyborski Edit" are by A. Sindhu and J. Styborski and are used with credit.
+"""
+
+from typing import List, Optional, Union
+
 import numpy as np
-from typing import List, Optional, Tuple, Union
-import random
+import torch
+
 
 def collect_intermediate_latents():
+    """Return (modern_callback, legacy_callback, collected). Each step's latents are appended to
+    `collected` on CPU, so long runs don't fill GPU memory."""
     collected = []
 
-    def modern_callback(pipe, step, timestep, callback_kwargs): # Function signature must match pipeline for compatibility.
-        collected.append(callback_kwargs["latents"].detach().cpu()) # Detach and move to CPU to avoid GPU Vram from filling up during extended runs.
+    def modern_callback(pipe, step, timestep, callback_kwargs):  # signature required by diffusers
+        collected.append(callback_kwargs["latents"].detach().cpu())
         return {}
 
     def legacy_callback(step, timestep, latents):
         collected.append(latents.detach().cpu())
 
     return modern_callback, legacy_callback, collected
+
 
 def inert_prepare_latents(self, batch_size, num_channels_latents, height, width, dtype, device, generator, latents=None):
 

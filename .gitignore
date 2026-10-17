@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# Data, latents and run outputs (large; regenerate with the scripts)
+data/
+latents/
+outputs/
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+
+# Keep the committed result tables
+!results/
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

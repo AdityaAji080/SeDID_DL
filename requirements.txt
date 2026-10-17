@@ -1,0 +1,12 @@
+# Python 3.12+ required (itertools.batched).
+# Install the torch/torchvision build matching your CUDA version first: https://pytorch.org/get-started/locally/
+# Tested with torch 2.14, diffusers 0.41, transformers 5.20, scikit-learn 1.9.
+torch>=2.1
+torchvision>=0.16
+diffusers>=0.30
+transformers>=4.40
+accelerate>=0.30
+scikit-learn>=1.3
+numpy
+pillow
+tqdm
