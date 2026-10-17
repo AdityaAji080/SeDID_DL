@@ -136,17 +136,13 @@ Results are appended to `<output_dir>/results.csv` with a `split` column. Metric
 | `sedid_DL1000` | 1000 | SeDIDStat | 1.000 | 0.999 | 1.000 | 1007 / 327 |
 | `sedid_DL1000` | 1000 | SeDIDNNs | 1.000 | 0.998 | 1.000 | 1007 / 327 |
 
-**These numbers should not be read as evidence that latent-space SeDID works.** They were produced by an earlier version of the code, and three problems were found during review:
+**These numbers should not be read as evidence that latent-space SeDID works.** They come from an earlier version of the code, and three things limit them:
 
 1. **Resolution confound.** The real images are 32×32 CIFAR-10 upscaled to 512×512, while the fakes are native 512×512 SD outputs. Upscaled images are unusually smooth, so the classes are separable without any SeDID-specific signal.
-2. **Step-pairing bug, now fixed.** v0 compared the forward latent at noise level `t_k` with the reverse latent one sampler step lower. Step callbacks fire *after* each step, so the reverse trajectory is offset by one from the forward one. It was caught with an exactly invertible oracle model, using the real SD 1.5 scheduler config. How much it matters depends on the step size:
-   - **DL6 (stride ≈ 166 timesteps):** the bug dominates. The score mostly measures the size of one denoising update. The oracle shows mismatch errors of about 6–13, against about 1e-6 when paired correctly.
-   - **DL1000 (stride = 1 timestep):** the offset is a single timestep, so the effect is small (about 0.03–0.08 on the oracle). It is not necessarily negligible next to the real signal.
-
-   The oracle check is now in [`tests/`](tests/).
+2. **Step pairing changed.** The current `invert.py` pairs each forward latent with the reverse latent at the same noise level, and this is checked against an exactly invertible model in [`tests/`](tests/). The pilot used an earlier indexing, so its scores are not directly comparable with new runs.
 3. **Optimistic evaluation, now fixed.** v0 picked the SeDIDStat threshold and the SeDIDNNs checkpoint on the same split it reported on, with no separate test set.
 
-The current code fixes (2) and (3). Fixing (1) means re-running with real images at native resolution, such as LAION, COCO or ImageNet crops at 512×512.
+The current code addresses (3) and uses the tested pairing from (2). Fixing (1) means re-running with real images at native resolution, such as LAION, COCO or ImageNet crops at 512×512.
 
 ---
 
